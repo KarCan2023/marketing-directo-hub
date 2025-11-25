@@ -507,8 +507,8 @@ def page_copies():
         "La información solo vive en esta sesión (no se guarda en ninguna base)."
     )
 
-    # >>> CAMPAÑA HISTÓRICA PRE-CARGADA <<< 
-    if "copies_df" not in st.session_state:
+    # Inicializar con campaña histórica si NO existe o está vacía
+    if "copies_df" not in st.session_state or st.session_state.copies_df.empty:
         campaña_hist = {
             "campaña": "wa_col_pos_850cop_emp_20112025_vn",
             "canal": "WhatsApp",
@@ -516,7 +516,7 @@ def page_copies():
             "segmento": "Empresarios",
             "objetivo": (
                 "Push POS $850/día fin de año – directo a SQL. "
-                "Planeado: 5.000 envíos, 150 SQL (3%). "
+                "Planeado: 5.000 envíos, 150 MQL/SQL (3% leads→SQL). "
                 "Resultado: 4.933 usuarios, 3.996 entregados, 359 respuestas (9% resp). "
                 "Creativo: video Nico."
             ),
@@ -528,8 +528,9 @@ def page_copies():
                 "Por ser fin de año, te damos una asesoría GRATIS 👉\n\n"
                 "Empieza aquí"
             ),
-            "tasa_respuesta": 0.09,  # 9% real
-            "sql_generados": None,   # déjalo editable, tú defines el número final
+            "tasa_respuesta": 0.09,  # 9% real (359 / 3.996 aprox)
+            # Puedes dejar 150 (objetivo) o 0 para que lo llenes después
+            "sql_generados": 150,
             "es_ganador": True,
         }
 
@@ -548,6 +549,7 @@ def page_copies():
             ],
         )
 
+    # Editor interactivo
     copies_df = st.data_editor(
         st.session_state.copies_df,
         use_container_width=True,
@@ -577,6 +579,7 @@ def page_copies():
 
     st.markdown("#### Copies filtrados")
     st.dataframe(df_show, use_container_width=True)
+
 
 
 # ------------------ PÁGINA: SIMULACIONES ------------------ #
