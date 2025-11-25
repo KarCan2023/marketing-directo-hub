@@ -15,7 +15,7 @@ CHANNELS = {
     },
     "SMS": {
         "moneda": "COP",
-        "costo": 4.0,      # 6 COP por SMS
+        "costo": 4.0,      # 4 COP por SMS
         "tasa_mql": 0.0,
         "tasa_sql": 0.0,
     },
@@ -41,7 +41,7 @@ def get_cost_cop(canal: str, fx: float) -> float:
         return 0.0
     if info["moneda"] == "COP":
         return float(info["costo"])
-    # USD -> COP
+    # USD → COP
     return float(info["costo"]) * fx
 
 
@@ -88,7 +88,7 @@ def page_calculadora():
 
         colA, colB, colC = st.columns(3)
         cantidad_contactos = colA.number_input(
-            "Cantidad de contactos en la base",
+            "Cantidad de contactos en la base canal 1",
             min_value=0,
             value=2858,
             step=100,
@@ -167,17 +167,32 @@ def page_calculadora():
             f"**{costo1_fmt} {moneda_trabajo}**"
         )
 
-        # --- Canal 2 opcional --- #
+        # --- Canal 2 y 3: inicialización de variables --- #
         canal2 = None
+        cantidad_contactos_2 = 0
         tasa_mql2_input = 0.0
         tasa_sql2_input = 0.0
+
+        add_third = False
+        canal3 = None
+        cantidad_contactos_3 = 0
+        tasa_mql3_input = 0.0
+        tasa_sql3_input = 0.0
+
+        # --- Canal 2 opcional --- #
         if add_second:
             st.markdown("### Canal 2 (opcional)")
-
-            canal2 = st.selectbox(
+            col2a, col2b = st.columns(2)
+            canal2 = col2a.selectbox(
                 "Canal 2",
                 list(CHANNELS.keys()),
                 key="canal2",
+            )
+            cantidad_contactos_2 = col2b.number_input(
+                "Cantidad de contactos en la base canal 2",
+                min_value=0,
+                value=0,
+                step=100,
             )
 
             info_canal2_default = CHANNELS[canal2]
@@ -211,39 +226,106 @@ def page_calculadora():
                 f"**{costo2_fmt} {moneda_trabajo}**"
             )
 
+            # --- Canal 3 opcional --- #
+            add_third = st.checkbox("Añadir tercer canal", value=False, key="add_third")
+            if add_third:
+                st.markdown("### Canal 3 (opcional)")
+                col3a, col3b = st.columns(2)
+                canal3 = col3a.selectbox(
+                    "Canal 3",
+                    list(CHANNELS.keys()),
+                    key="canal3",
+                )
+                cantidad_contactos_3 = col3b.number_input(
+                    "Cantidad de contactos en la base canal 3",
+                    min_value=0,
+                    value=0,
+                    step=100,
+                )
+
+                info_canal3_default = CHANNELS[canal3]
+                col3_t1, col3_t2 = st.columns(2)
+                tasa_mql3_input = col3_t1.number_input(
+                    "Tasa MQL canal 3 (0-1, editable)",
+                    min_value=0.0,
+                    max_value=1.0,
+                    step=0.0001,
+                    value=float(info_canal3_default["tasa_mql"]),
+                    format="%.4f",
+                    help="Solo aplica si el funnel es MQL → SQL.",
+                )
+                tasa_sql3_input = col3_t2.number_input(
+                    "Tasa SQL canal 3 (0-1, editable)",
+                    min_value=0.0,
+                    max_value=1.0,
+                    step=0.0001,
+                    value=float(info_canal3_default["tasa_sql"]),
+                    format="%.4f",
+                    help="En Directo: tasa de contactos que llegan a SQL. En MQL→SQL: tasa de MQL que pasan a SQL.",
+                )
+
+                costo_unit3_display = get_cost_display(canal3, moneda_trabajo, tipo_cambio)
+                if moneda_trabajo == "COP":
+                    costo3_fmt = f"{costo_unit3_display:,.0f}"
+                else:
+                    costo3_fmt = f"{costo_unit3_display:.4f}"
+                st.info(
+                    f"Costo unitario estimado Canal 3 ({canal3}): "
+                    f"**{costo3_fmt} {moneda_trabajo}**"
+                )
+
         submitted = st.form_submit_button("Calcular")
 
     if not submitted:
         return
 
-    # ------------------ VALIDACIONES ------------------ #
-    if cantidad_contactos <= 0 or num_envios_contacto <= 0:
-        st.warning("La cantidad de contactos y de envíos deben ser mayores a 0.")
-        return
-
-    # ------------------ CÁLCULO POR CANAL ------------------ #
+    # ------------------ ARMAR CONFIG DE CANALES ------------------ #
     canales_config = []
 
     # Canal 1
-    canales_config.append(
-        {
-            "canal": canal1,
-            "tasa_mql": float(tasa_mql1_input),
-            "tasa_sql": float(tasa_sql1_input),
-        }
-    )
+    if cantidad_contactos > 0:
+        canales_config.append(
+            {
+                "canal": canal1,
+                "tasa_mql": float(tasa_mql1_input),
+                "tasa_sql": float(tasa_sql1_input),
+                "base": int(cantidad_contactos),
+            }
+        )
 
-    # Canal 2 (si aplica)
-    if add_second and canal2 is not None:
+    # Canal 2
+    if add_second and canal2 is not None and cantidad_contactos_2 > 0:
         canales_config.append(
             {
                 "canal": canal2,
                 "tasa_mql": float(tasa_mql2_input),
                 "tasa_sql": float(tasa_sql2_input),
+                "base": int(cantidad_contactos_2),
             }
         )
 
+    # Canal 3
+    if add_second and add_third and canal3 is not None and cantidad_contactos_3 > 0:
+        canales_config.append(
+            {
+                "canal": canal3,
+                "tasa_mql": float(tasa_mql3_input),
+                "tasa_sql": float(tasa_sql3_input),
+                "base": int(cantidad_contactos_3),
+            }
+        )
+
+    if not canales_config:
+        st.warning("Configura al menos un canal con base > 0.")
+        return
+
+    if num_envios_contacto <= 0:
+        st.warning("La cantidad de envíos por contacto debe ser mayor a 0.")
+        return
+
+    # ------------------ CÁLCULO POR CANAL ------------------ #
     resultados_canales = []
+    total_base = 0
     total_envios = 0
     total_mql = 0
     total_sql = 0
@@ -251,23 +333,25 @@ def page_calculadora():
 
     for cfg in canales_config:
         canal = cfg["canal"]
+        base = cfg["base"]
         tasa_mql = cfg["tasa_mql"]
         tasa_sql = cfg["tasa_sql"]
 
-        envios = cantidad_contactos * num_envios_contacto
+        envios = base * num_envios_contacto
         costo_unit_cop = get_cost_cop(canal, tipo_cambio)
         costo_canal_cop = envios * costo_unit_cop
 
         # Funnel por canal
         if tipo_funnel == "Directo a SQL":
-            mql = math.floor(cantidad_contactos * tasa_sql)  # contactos efectivos
-            sql = mql                                        # MQL = SQL
+            mql = math.floor(base * tasa_sql)  # contactos efectivos
+            sql = mql                         # MQL = SQL
             nota = "todos los contactos efectivos pasan directo a comercial (paso MQL-SQL 100%)"
         else:
-            mql = math.floor(cantidad_contactos * tasa_mql)
+            mql = math.floor(base * tasa_mql)
             sql = math.floor(mql * tasa_sql)
             nota = "MQL → SQL según tasas configuradas para el canal"
 
+        total_base += base
         total_envios += envios
         total_mql += mql
         total_sql += sql
@@ -279,7 +363,7 @@ def page_calculadora():
             {
                 "segmento": segmento,
                 "canal": canal,
-                "base": cantidad_contactos,
+                "base": base,
                 "envios": int(envios),
                 "mql": int(mql),
                 "sql": int(sql),
@@ -301,7 +385,9 @@ def page_calculadora():
     else:
         costo_total_calc = total_costo_cop / tipo_cambio if tipo_cambio > 0 else 0.0
 
-    cps_calc = cps_calc_cop if moneda_trabajo == "COP" else (cps_calc_cop / tipo_cambio if tipo_cambio > 0 else 0.0)
+    cps_calc = cps_calc_cop if moneda_trabajo == "COP" else (
+        cps_calc_cop / tipo_cambio if tipo_cambio > 0 else 0.0
+    )
 
     # Budget opcional convertido a COP
     if budget_input and budget_input > 0:
@@ -321,7 +407,7 @@ def page_calculadora():
         cps_metric_fmt = f"{cps_calc:.2f}" if total_sql > 0 else "N/A"
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Base total", f"{int(cantidad_contactos):,}")
+    col1.metric("Base total", f"{int(total_base):,}")
     col2.metric("SQL totales", f"{int(total_sql):,}")
     col3.metric("Costo por SQL (calculado)", f"{cps_metric_fmt} {moneda_trabajo}")
 
@@ -368,7 +454,7 @@ def page_calculadora():
 
     lines = []
     lines.append(f"Base: {base_label}")
-    lines.append(f"Cantidad: {int(cantidad_contactos):,}")
+    lines.append(f"Cantidad: {int(total_base):,}")
     lines.append(f"Canales: {canales_nombres}")
     lines.append(f"Cantidad de envíos: {num_envios_contacto:.0f} envío(s)")
     lines.append(f"Budget: {budget_str} {moneda_trabajo}")
