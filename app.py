@@ -73,9 +73,9 @@ def page_calculadora():
         tipo_cambio = colm2.number_input(
             "Tasa de cambio USD → COP",
             min_value=1.0,
-            value=4200.0,
+            value=4000.0,
             step=50.0,
-            help="Ejemplo: 1 USD = 4200 COP.",
+            help="Ejemplo: 1 USD = 4000 COP.",
         )
 
         # Datos generales de la base / campaña
