@@ -9,7 +9,7 @@ st.set_page_config(page_title="Marketing Directo – Calculadora SQL", layout="w
 CHANNELS = {
     "WhatsApp": {
         "moneda": "USD",
-        "costo": 0.067,     # 0.067 USD por envío
+        "costo": 0.09,     # 0.09 USD por envío
         "tasa_mql": 0.0,    # no aplica en directo
         "tasa_sql": 0.03,   # 3% directo a SQL
     },
