@@ -507,8 +507,34 @@ def page_copies():
         "La información solo vive en esta sesión (no se guarda en ninguna base)."
     )
 
+    # >>> CAMPAÑA HISTÓRICA PRE-CARGADA <<< 
     if "copies_df" not in st.session_state:
+        campaña_hist = {
+            "campaña": "wa_col_pos_850cop_emp_20112025_vn",
+            "canal": "WhatsApp",
+            "pais": "Colombia",
+            "segmento": "Empresarios",
+            "objetivo": (
+                "Push POS $850/día fin de año – directo a SQL. "
+                "Planeado: 5.000 envíos, 150 SQL (3%). "
+                "Resultado: 4.933 usuarios, 3.996 entregados, 359 respuestas (9% resp). "
+                "Creativo: video Nico."
+            ),
+            "copy_texto": (
+                "¡Hola, {{hubspot_firstname}}! Esta temporada tu negocio puede estar "
+                "*lleno… y bajo control* 🎉\n\n"
+                "Con un POS desde *$850 al día* facturas electrónicamente, manejas "
+                "inventario y evitas errores en caja.\n\n"
+                "Por ser fin de año, te damos una asesoría GRATIS 👉\n\n"
+                "Empieza aquí"
+            ),
+            "tasa_respuesta": 0.09,  # 9% real
+            "sql_generados": None,   # déjalo editable, tú defines el número final
+            "es_ganador": True,
+        }
+
         st.session_state.copies_df = pd.DataFrame(
+            [campaña_hist],
             columns=[
                 "campaña",
                 "canal",
@@ -519,7 +545,7 @@ def page_copies():
                 "tasa_respuesta",
                 "sql_generados",
                 "es_ganador",
-            ]
+            ],
         )
 
     copies_df = st.data_editor(
