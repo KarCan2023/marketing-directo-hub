@@ -15,7 +15,7 @@ CHANNELS = {
     },
     "SMS": {
         "moneda": "COP",
-        "costo": 6.0,      # 6 COP por SMS
+        "costo": 4.0,      # 6 COP por SMS
         "tasa_mql": 0.0,
         "tasa_sql": 0.0,
     },
