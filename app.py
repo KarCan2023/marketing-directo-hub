@@ -10,14 +10,14 @@ CHANNELS = {
     "WhatsApp": {
         "moneda": "USD",
         "costo": 0.09,     # 0.09 USD por envío
-        "tasa_mql": 0.0,    # no aplica en directo
-        "tasa_sql": 0.03,   # 3% directo a SQL
+        "tasa_mql": 0.0,   # no aplica en directo
+        "tasa_sql": 0.03,  # 3% directo a SQL
     },
     "SMS": {
         "moneda": "COP",
-        "costo": 6.0,       # 6 COP por SMS
-        "tasa_mql": 0, # 0.08% MQL
-        "tasa_sql": 0,   # 30% de los MQL pasan a SQL
+        "costo": 6.0,      # 6 COP por SMS
+        "tasa_mql": 0.0,
+        "tasa_sql": 0.0,
     },
     "Email": {
         "moneda": "COP",
@@ -28,8 +28,8 @@ CHANNELS = {
     "Call Blasting": {
         "moneda": "COP",
         "costo": 175.0,     # 175 COP
-        "tasa_mql": 0,
-        "tasa_sql": 0,   # 10% directo a SQL (referencial)
+        "tasa_mql": 0.0,
+        "tasa_sql": 0.0,
     },
 }
 
@@ -132,11 +132,37 @@ def page_calculadora():
             horizontal=True,
         )
 
+        # Tasas editables según canal (con default del diccionario)
+        info_canal_default = CHANNELS[canal]
+        col_t1, col_t2 = st.columns(2)
+        tasa_mql_input = col_t1.number_input(
+            "Tasa MQL (0-1, editable)",
+            min_value=0.0,
+            max_value=1.0,
+            step=0.0001,
+            value=float(info_canal_default["tasa_mql"]),
+            format="%.4f",
+            help="Solo aplica si el funnel es MQL → SQL.",
+        )
+        tasa_sql_input = col_t2.number_input(
+            "Tasa SQL (0-1, editable)",
+            min_value=0.0,
+            max_value=1.0,
+            step=0.0001,
+            value=float(info_canal_default["tasa_sql"]),
+            format="%.4f",
+            help="En Directo: tasa de contactos que llegan a SQL. En MQL→SQL: tasa de MQL que pasan a SQL.",
+        )
+
         # Costo unitario según canal
         costo_unit_display = get_cost_display(canal, moneda_trabajo, tipo_cambio)
+        if moneda_trabajo == "COP":
+            costo_fmt = f"{costo_unit_display:,.0f}"
+        else:
+            costo_fmt = f"{costo_unit_display:.4f}"
         st.info(
             f"Costo unitario estimado para {canal}: "
-            f"**{costo_unit_display:.4f} {moneda_trabajo}**"
+            f"**{costo_fmt} {moneda_trabajo}**"
         )
 
         submitted = st.form_submit_button("Calcular")
@@ -149,9 +175,9 @@ def page_calculadora():
         st.warning("La cantidad de contactos y de envíos deben ser mayores a 0.")
         return
 
-    info_canal = CHANNELS[canal]
-    tasa_mql = float(info_canal["tasa_mql"])
-    tasa_sql = float(info_canal["tasa_sql"])
+    # Usamos las tasas ingresadas por el usuario
+    tasa_mql = float(tasa_mql_input)
+    tasa_sql = float(tasa_sql_input)
 
     envios = cantidad_contactos * num_envios_contacto
     costo_unit_cop = get_cost_cop(canal, tipo_cambio)
@@ -194,23 +220,35 @@ def page_calculadora():
         cps_budget = cps_budget_cop if moneda_trabajo == "COP" else cps_budget_cop / tipo_cambio
 
     # ------------------ MÉTRICAS ARRIBA ------------------ #
+    if moneda_trabajo == "COP":
+        cps_metric_fmt = f"{cps_calc:,.0f}" if sql > 0 else "N/A"
+    else:
+        cps_metric_fmt = f"{cps_calc:.2f}" if sql > 0 else "N/A"
+
     col1, col2, col3 = st.columns(3)
     col1.metric("Base total", f"{int(cantidad_contactos):,}")
     col2.metric("SQL totales", f"{int(sql):,}")
-    col3.metric(
-        "Costo por SQL (calculado)",
-        f"{cps_calc:.2f} {moneda_trabajo}" if sql > 0 else "N/A",
-    )
+    col3.metric("Costo por SQL (calculado)", f"{cps_metric_fmt} {moneda_trabajo}")
+
+    # ------------------ RESUMEN DE COSTOS ------------------ #
+    if moneda_trabajo == "COP":
+        costo_total_fmt = f"{costo_total_calc:,.0f}"
+    else:
+        costo_total_fmt = f"{costo_total_calc:,.2f}"
 
     st.markdown("#### Resumen de costos")
     st.write(
-        f"- Costo total estimado (calculado): **{costo_total_calc:,.2f} {moneda_trabajo}** "
+        f"- Costo total estimado (calculado): **{costo_total_fmt} {moneda_trabajo}** "
         f"(~{costo_total_cop:,.0f} COP)"
     )
     if cps_budget is not None:
+        if moneda_trabajo == "COP":
+            cps_budget_fmt = f"{cps_budget:,.0f}"
+        else:
+            cps_budget_fmt = f"{cps_budget:.2f}"
         st.write(
             f"- Costo por SQL según budget ({budget_input:.2f} {moneda_trabajo}): "
-            f"**{cps_budget:.2f} {moneda_trabajo}**"
+            f"**{cps_budget_fmt} {moneda_trabajo}**"
         )
 
     # ------------------ OUTPUT FORMATO TEXTO ------------------ #
@@ -220,12 +258,23 @@ def page_calculadora():
     else:
         budget_out = costo_total_calc
 
+    if moneda_trabajo == "COP":
+        budget_str = f"{budget_out:,.0f}"
+        costo_total_calc_str = f"{costo_total_calc:,.0f}"
+        cps_calc_str = f"{cps_calc:,.0f}"
+        cps_budget_str = f"{cps_budget:,.0f}" if cps_budget is not None else None
+    else:
+        budget_str = f"{budget_out:.2f}"
+        costo_total_calc_str = f"{costo_total_calc:.2f}"
+        cps_calc_str = f"{cps_calc:.2f}"
+        cps_budget_str = f"{cps_budget:.2f}" if cps_budget is not None else None
+
     lines = []
     lines.append(f"Base: {base_label}")
     lines.append(f"Cantidad: {int(cantidad_contactos):,}")
     lines.append(f"Canales: {canal}")
     lines.append(f"Cantidad de envíos: {num_envios_contacto:.0f} envío(s)")
-    lines.append(f"Budget: {budget_out:.2f} {moneda_trabajo}")
+    lines.append(f"Budget: {budget_str} {moneda_trabajo}")
     lines.append("Funnel * validado por segmentos sin nuestro ok")
 
     lines.append(f"{segmento}:")
@@ -245,12 +294,12 @@ def page_calculadora():
     lines.append("Costos:")
     lines.append(f"SQLs totales: {int(sql)}")
     lines.append(
-        f"Costo total estimado: {costo_total_calc:.2f} {moneda_trabajo} (~{costo_total_cop:,.0f} COP)"
+        f"Costo total estimado: {costo_total_calc_str} {moneda_trabajo} (~{costo_total_cop:,.0f} COP)"
     )
-    lines.append(f"Costo por sql: {cps_calc:.2f} {moneda_trabajo}")
-    if cps_budget is not None:
+    lines.append(f"Costo por sql: {cps_calc_str} {moneda_trabajo}")
+    if cps_budget_str is not None:
         lines.append(
-            f"Costo por sql (según budget {budget_out:.2f} {moneda_trabajo}): {cps_budget:.2f} {moneda_trabajo}"
+            f"Costo por sql (según budget {budget_str} {moneda_trabajo}): {cps_budget_str} {moneda_trabajo}"
         )
 
     output_text = "\n".join(lines)
@@ -270,7 +319,7 @@ def page_calculadora():
                     "mql": int(mql),
                     "sql": int(sql),
                     "costo_total_cop": int(costo_total_cop),
-                    "costo_por_sql_cop": round(cps_calc_cop, 2) if sql > 0 else 0,
+                    "costo_por_sql_cop": int(round(cps_calc_cop)) if sql > 0 else 0,
                 }
             ]
         ),
