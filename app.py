@@ -400,6 +400,17 @@ def page_calculadora():
         cps_budget_cop = budget_cop / total_sql
         cps_budget = cps_budget_cop if moneda_trabajo == "COP" else cps_budget_cop / tipo_cambio
 
+    # ------------------ Guardar resultados base en sesión ------------------ #
+    st.session_state["calc_results"] = {
+        "moneda_trabajo": moneda_trabajo,
+        "tipo_cambio": tipo_cambio,
+        "tipo_funnel": tipo_funnel,
+        "total_base": total_base,
+        "total_mql": total_mql,
+        "total_sql": total_sql,
+        "total_costo_cop": float(total_costo_cop),
+    }
+
     # ------------------ MÉTRICAS ARRIBA ------------------ #
     if moneda_trabajo == "COP":
         cps_metric_fmt = f"{cps_calc:,.0f}" if total_sql > 0 else "N/A"
@@ -430,122 +441,6 @@ def page_calculadora():
         st.write(
             f"- Costo por SQL según budget ({budget_input:.2f} {moneda_trabajo}): "
             f"**{cps_budget_fmt} {moneda_trabajo}**"
-        )
-
-    # ------------------ SIMULACIONES ------------------ #
-    st.markdown("### Simulaciones")
-
-    col_sim1, col_sim2 = st.columns(2)
-
-    # --- Simulación 1: con este budget, ¿cuántos MQL / SQL? --- #
-    budget_sim = col_sim1.number_input(
-        f"Simulación 1 – Con este budget, ¿cuántos MQL / SQL podemos alcanzar? ({moneda_trabajo})",
-        min_value=0.0,
-        value=0.0,
-        step=10.0,
-    )
-
-    if budget_sim > 0 and total_costo_cop > 0 and total_sql > 0:
-        budget_sim_cop = budget_sim * (tipo_cambio if moneda_trabajo == "USD" else 1.0)
-        factor = budget_sim_cop / total_costo_cop
-
-        mql_sim = math.floor(total_mql * factor)
-        sql_sim = math.floor(total_sql * factor)
-
-        col_sim1.write(
-            f"Con un budget de **{budget_sim:,.0f} {moneda_trabajo}** "
-            f"(~{budget_sim_cop:,.0f} COP) y manteniendo las tasas actuales:"
-        )
-        col_sim1.write(
-            f"- MQL aproximados: **{mql_sim:,}**\n"
-            f"- SQL aproximados: **{sql_sim:,}**"
-        )
-    elif budget_sim > 0:
-        col_sim1.warning(
-            "No se puede simular con budget porque el costo total o los SQL calculados son 0."
-        )
-
-    # --- Simulación 2: con X SQL / MQL, ¿qué budget necesito? --- #
-    sql_obj = col_sim2.number_input(
-        "Simulación 2 – SQL objetivo",
-        min_value=0,
-        value=0,
-        step=10,
-    )
-    mql_obj = col_sim2.number_input(
-        "MQL objetivo (opcional)",
-        min_value=0,
-        value=0,
-        step=10,
-    )
-
-    # SQL objetivo → budget necesario
-    if sql_obj > 0 and total_sql > 0 and total_costo_cop > 0:
-        cps_cop = total_costo_cop / total_sql
-        budget_sql_cop = sql_obj * cps_cop
-        budget_sql = budget_sql_cop if moneda_trabajo == "COP" else budget_sql_cop / tipo_cambio
-
-        # MQL necesarios para lograr esa cantidad de SQL (según tasas actuales)
-        mql_sql_obj = 0
-        if tipo_funnel == "Directo a SQL":
-            mql_sql_obj = sql_obj
-        elif total_mql > 0 and total_sql > 0:
-            tasa_sql_global = total_sql / total_mql
-            if tasa_sql_global > 0:
-                mql_sql_obj = math.ceil(sql_obj / tasa_sql_global)
-
-        if moneda_trabajo == "COP":
-            budget_sql_fmt = f"{budget_sql:,.0f}"
-        else:
-            budget_sql_fmt = f"{budget_sql:,.2f}"
-
-        col_sim2.write(
-            f"Para alcanzar **{sql_obj:,} SQL**, necesitas aprox. "
-            f"**{budget_sql_fmt} {moneda_trabajo}** "
-            f"(~{budget_sql_cop:,.0f} COP)."
-        )
-        if mql_sql_obj > 0:
-            col_sim2.write(
-                f"Con las tasas actuales, eso implica alrededor de **{mql_sql_obj:,} MQL**."
-            )
-    elif sql_obj > 0:
-        col_sim2.warning(
-            "No se puede calcular budget para SQL objetivo porque los SQL o el costo total actuales son 0."
-        )
-
-    # MQL objetivo → budget necesario
-    if mql_obj > 0 and total_mql > 0 and total_costo_cop > 0:
-        cpmql_cop = total_costo_cop / total_mql
-        budget_mql_cop = mql_obj * cpmql_cop
-        budget_mql = budget_mql_cop if moneda_trabajo == "COP" else budget_mql_cop / tipo_cambio
-
-        # SQL estimados a partir de esos MQL
-        if tipo_funnel == "Directo a SQL":
-            sql_from_mql = mql_obj
-        else:
-            if total_mql > 0 and total_sql > 0:
-                tasa_sql_global = total_sql / total_mql
-                sql_from_mql = math.floor(mql_obj * tasa_sql_global)
-            else:
-                sql_from_mql = 0
-
-        if moneda_trabajo == "COP":
-            budget_mql_fmt = f"{budget_mql:,.0f}"
-        else:
-            budget_mql_fmt = f"{budget_mql:,.2f}"
-
-        col_sim2.write(
-            f"Para alcanzar **{mql_obj:,} MQL**, necesitas aprox. "
-            f"**{budget_mql_fmt} {moneda_trabajo}** "
-            f"(~{budget_mql_cop:,.0f} COP)."
-        )
-        if sql_from_mql > 0:
-            col_sim2.write(
-                f"Eso se traduciría en aprox. **{sql_from_mql:,} SQL** con las tasas actuales."
-            )
-    elif mql_obj > 0:
-        col_sim2.warning(
-            "No se puede calcular budget para MQL objetivo porque los MQL o el costo total actuales son 0."
         )
 
     # ------------------ OUTPUT FORMATO TEXTO ------------------ #
@@ -669,13 +564,191 @@ def page_copies():
     st.dataframe(df_show, use_container_width=True)
 
 
+# ------------------ PÁGINA: SIMULACIONES ------------------ #
+def page_simulaciones():
+    st.header("Simulaciones de budget y objetivos")
+
+    if "calc_results" not in st.session_state:
+        st.warning("Primero corre la Calculadora para generar resultados base.")
+        st.info(
+            "Ve a la pestaña 'Calculadora', configura tu campaña y haz clic en 'Calcular'. "
+            "Luego vuelve a esta pestaña para simular."
+        )
+        return
+
+    data = st.session_state["calc_results"]
+    moneda_trabajo = data["moneda_trabajo"]
+    tipo_cambio = data["tipo_cambio"]
+    tipo_funnel = data["tipo_funnel"]
+    total_mql = data["total_mql"]
+    total_sql = data["total_sql"]
+    total_costo_cop = data["total_costo_cop"]
+
+    if total_sql > 0:
+        cps_cop = total_costo_cop / total_sql
+    else:
+        cps_cop = 0.0
+
+    if total_mql > 0:
+        cpmql_cop = total_costo_cop / total_mql
+    else:
+        cpmql_cop = 0.0
+
+    # tasa SQL global para funnel MQL → SQL
+    if tipo_funnel == "Directo a SQL":
+        tasa_sql_global = 1.0
+    else:
+        if total_mql > 0:
+            tasa_sql_global = total_sql / total_mql if total_mql > 0 else 0.0
+        else:
+            tasa_sql_global = 0.0
+
+    # Contexto
+    st.subheader("Contexto actual (desde Calculadora)")
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("MQL totales", f"{int(total_mql):,}")
+    col_b.metric("SQL totales", f"{int(total_sql):,}")
+    if moneda_trabajo == "COP":
+        cps_fmt = f"{cps_cop:,.0f}" if total_sql > 0 else "N/A"
+    else:
+        cps_fmt = (
+            f"{(cps_cop / tipo_cambio if tipo_cambio > 0 else 0.0):.2f}"
+            if total_sql > 0
+            else "N/A"
+        )
+    col_c.metric("Costo por SQL base", f"{cps_fmt} {moneda_trabajo}")
+
+    st.markdown("---")
+
+    col_sim1, col_sim2 = st.columns(2)
+
+    # --- Simulación 1: con este budget, ¿cuántos MQL / SQL? --- #
+    budget_sim = col_sim1.number_input(
+        f"Simulación 1 – Budget disponible ({moneda_trabajo})",
+        min_value=0.0,
+        value=0.0,
+        step=10.0,
+    )
+
+    if budget_sim > 0:
+        if total_costo_cop > 0 and total_sql > 0:
+            budget_sim_cop = budget_sim * (tipo_cambio if moneda_trabajo == "USD" else 1.0)
+            factor = budget_sim_cop / total_costo_cop
+
+            mql_sim = math.floor(total_mql * factor) if total_mql > 0 else 0
+            sql_sim = math.floor(total_sql * factor)
+
+            col_sim1.write(
+                f"Con un budget de **{budget_sim:,.0f} {moneda_trabajo}** "
+                f"(~{budget_sim_cop:,.0f} COP) y manteniendo las tasas actuales:"
+            )
+            col_sim1.write(
+                f"- MQL aproximados: **{mql_sim:,}**\n"
+                f"- SQL aproximados: **{sql_sim:,}**"
+            )
+        else:
+            col_sim1.warning(
+                "No se puede simular con budget porque el costo total o los SQL calculados son 0."
+            )
+
+    # --- Simulación 2: con X SQL / MQL, ¿qué budget necesito? --- #
+    sql_obj = col_sim2.number_input(
+        "Simulación 2 – SQL objetivo",
+        min_value=0,
+        value=0,
+        step=10,
+    )
+    mql_obj = col_sim2.number_input(
+        "MQL objetivo (opcional)",
+        min_value=0,
+        value=0,
+        step=10,
+    )
+
+    # SQL objetivo → budget necesario
+    if sql_obj > 0:
+        if total_sql > 0 and total_costo_cop > 0:
+            budget_sql_cop = sql_obj * cps_cop
+            budget_sql = (
+                budget_sql_cop
+                if moneda_trabajo == "COP"
+                else (budget_sql_cop / tipo_cambio if tipo_cambio > 0 else 0.0)
+            )
+
+            if tipo_funnel == "Directo a SQL":
+                mql_sql_obj = sql_obj
+            else:
+                if tasa_sql_global > 0:
+                    mql_sql_obj = math.ceil(sql_obj / tasa_sql_global)
+                else:
+                    mql_sql_obj = 0
+
+            if moneda_trabajo == "COP":
+                budget_sql_fmt = f"{budget_sql:,.0f}"
+            else:
+                budget_sql_fmt = f"{budget_sql:,.2f}"
+
+            col_sim2.write(
+                f"Para alcanzar **{sql_obj:,} SQL**, necesitas aprox. "
+                f"**{budget_sql_fmt} {moneda_trabajo}** "
+                f"(~{budget_sql_cop:,.0f} COP)."
+            )
+            if mql_sql_obj > 0:
+                col_sim2.write(
+                    f"Con las tasas actuales, eso implica alrededor de **{mql_sql_obj:,} MQL**."
+                )
+        else:
+            col_sim2.warning(
+                "No se puede calcular budget para SQL objetivo porque los SQL o el costo total actuales son 0."
+            )
+
+    # MQL objetivo → budget necesario
+    if mql_obj > 0:
+        if total_mql > 0 and total_costo_cop > 0:
+            budget_mql_cop = mql_obj * cpmql_cop
+            budget_mql = (
+                budget_mql_cop
+                if moneda_trabajo == "COP"
+                else (budget_mql_cop / tipo_cambio if tipo_cambio > 0 else 0.0)
+            )
+
+            if tipo_funnel == "Directo a SQL":
+                sql_from_mql = mql_obj
+            else:
+                if tasa_sql_global > 0:
+                    sql_from_mql = math.floor(mql_obj * tasa_sql_global)
+                else:
+                    sql_from_mql = 0
+
+            if moneda_trabajo == "COP":
+                budget_mql_fmt = f"{budget_mql:,.0f}"
+            else:
+                budget_mql_fmt = f"{budget_mql:.2f}"
+
+            col_sim2.write(
+                f"Para alcanzar **{mql_obj:,} MQL**, necesitas aprox. "
+                f"**{budget_mql_fmt} {moneda_trabajo}** "
+                f"(~{budget_mql_cop:,.0f} COP)."
+            )
+            if sql_from_mql > 0:
+                col_sim2.write(
+                    f"Eso se traduciría en aprox. **{sql_from_mql:,} SQL** con las tasas actuales."
+                )
+        else:
+            col_sim2.warning(
+                "No se puede calcular budget para MQL objetivo porque los MQL o el costo total actuales son 0."
+            )
+
+
 # ------------------ MAIN ------------------ #
 def main():
     st.title("Marketing Directo – Calculadora rápida")
 
-    page = st.sidebar.radio("Navegación", ["Calculadora", "Copies"])
+    page = st.sidebar.radio("Navegación", ["Calculadora", "Simulaciones", "Copies"])
     if page == "Calculadora":
         page_calculadora()
+    elif page == "Simulaciones":
+        page_simulaciones()
     else:
         page_copies()
 
