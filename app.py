@@ -16,8 +16,8 @@ CHANNELS = {
     "SMS": {
         "moneda": "COP",
         "costo": 6.0,       # 6 COP por SMS
-        "tasa_mql": 0.0008, # 0.08% MQL
-        "tasa_sql": 0.30,   # 30% de los MQL pasan a SQL
+        "tasa_mql": 0, # 0.08% MQL
+        "tasa_sql": 0,   # 30% de los MQL pasan a SQL
     },
     "Email": {
         "moneda": "COP",
@@ -28,8 +28,8 @@ CHANNELS = {
     "Call Blasting": {
         "moneda": "COP",
         "costo": 175.0,     # 175 COP
-        "tasa_mql": 0.0,
-        "tasa_sql": 0.10,   # 10% directo a SQL (referencial)
+        "tasa_mql": 0,
+        "tasa_sql": 0,   # 10% directo a SQL (referencial)
     },
 }
 
