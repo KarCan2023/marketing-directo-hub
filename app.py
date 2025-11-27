@@ -457,4 +457,207 @@ def page_calculadora():
             {
                 "canal": canal1,
                 "tasa_mql": float(tasa_mql1_input),
-                "tasa_sql": float(tasa_sql1
+                "tasa_sql": float(tasa_sql1_input),
+                "base": int(cantidad_contactos),
+            }
+        )
+
+    # Canal 2
+    if add_second and canal2 is not None and cantidad_contactos_2 > 0:
+        canales_config.append(
+            {
+                "canal": canal2,
+                "tasa_mql": float(tasa_mql2_input),
+                "tasa_sql": float(tasa_sql2_input),
+                "base": int(cantidad_contactos_2),
+            }
+        )
+
+    # Canal 3
+    if add_second and add_third and canal3 is not None and cantidad_contactos_3 > 0:
+        canales_config.append(
+            {
+                "canal": canal3,
+                "tasa_mql": float(tasa_mql3_input),
+                "tasa_sql": float(tasa_sql3_input),
+                "base": int(cantidad_contactos_3),
+            }
+        )
+
+    if not canales_config:
+        st.warning("Configura al menos un canal con base > 0.")
+        return
+
+    if num_envios_contacto <= 0:
+        st.warning("La cantidad de envíos por contacto debe ser mayor a 0.")
+        return
+
+    # ------------------ CÁLCULO POR CANAL ------------------ #
+    resultados_canales = []
+    total_base = 0
+    total_envios = 0
+    total_mql = 0
+    total_sql = 0
+    total_costo_cop = 0.0
+
+    for cfg in canales_config:
+        canal = cfg["canal"]
+        base = cfg["base"]
+        tasa_mql = cfg["tasa_mql"]
+        tasa_sql = cfg["tasa_sql"]
+
+        envios = base * num_envios_contacto
+        costo_unit_cop = get_cost_cop(canal, tipo_cambio, pais)
+        costo_canal_cop = envios * costo_unit_cop
+
+        # Funnel por canal
+        if tipo_funnel == "Directo a SQL":
+            mql = math.floor(base * tasa_sql)  # contactos efectivos
+            sql = mql                         # MQL = SQL
+            nota = "todos los contactos efectivos pasan directo a comercial (paso MQL-SQL 100%)"
+        else:
+            mql = math.floor(base * tasa_mql)
+            sql = math.floor(mql * tasa_sql)
+            nota = "MQL → SQL según tasas configuradas para el canal"
+
+        total_base += base
+        total_envios += envios
+        total_mql += mql
+        total_sql += sql
+        total_costo_cop += costo_canal_cop
+
+        # Cupos de envíos para este canal
+        max_envios = get_max_envios(pais, periodo_cupo, segmento, canal)
+        if max_envios is not None and max_envios > 0:
+            uso_cupo_pct = round(envios / max_envios * 100, 1)
+        else:
+            uso_cupo_pct = None
+
+        cps_canal_cop = costo_canal_cop / sql if sql > 0 else 0.0
+
+        resultados_canales.append(
+            {
+                "pais": pais,
+                "periodo_cupo": periodo_cupo,
+                "segmento": segmento,
+                "canal": canal,
+                "base": base,
+                "envios": int(envios),
+                "cupo_envios_periodo": int(max_envios) if max_envios is not None else None,
+                "uso_cupo_%": uso_cupo_pct,
+                "mql": int(mql),
+                "sql": int(sql),
+                "costo_total_cop": int(costo_canal_cop),
+                "costo_por_sql_cop": int(round(cps_canal_cop)) if sql > 0 else 0,
+                "nota": nota,
+            }
+        )
+
+    # Si no hay SQL, evitamos divisiones raras
+    if total_sql > 0:
+        cps_calc_cop = total_costo_cop / total_sql
+    else:
+        cps_calc_cop = 0.0
+
+    # Costos en moneda de trabajo (totales)
+    if moneda_trabajo == "COP":
+        costo_total_calc = total_costo_cop
+    else:
+        costo_total_calc = total_costo_cop / tipo_cambio if tipo_cambio > 0 else 0.0
+
+    cps_calc = cps_calc_cop if moneda_trabajo == "COP" else (
+        cps_calc_cop / tipo_cambio if tipo_cambio > 0 else 0.0
+    )
+
+    # Budget opcional convertido a COP
+    if budget_input and budget_input > 0:
+        budget_cop = budget_input * (tipo_cambio if moneda_trabajo == "USD" else 1.0)
+    else:
+        budget_cop = 0.0
+
+    cps_budget = None
+    if budget_cop > 0 and total_sql > 0:
+        cps_budget_cop = budget_cop / total_sql
+        cps_budget = cps_budget_cop if moneda_trabajo == "COP" else cps_budget_cop / tipo_cambio
+
+    # ------------------ MÉTRICAS ARRIBA ------------------ #
+    if moneda_trabajo == "COP":
+        cps_metric_fmt = f"{cps_calc:,.0f}" if total_sql > 0 else "N/A"
+    else:
+        cps_metric_fmt = f"{cps_calc:.2f}" if total_sql > 0 else "N/A"
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Base total", f"{int(total_base):,}")
+    col2.metric("SQL totales", f"{int(total_sql):,}")
+    col3.metric("Costo por SQL (calculado)", f"{cps_metric_fmt} {moneda_trabajo}")
+
+    # ------------------ CUPOS / USO DE ENVÍOS ------------------ #
+    st.markdown("#### Uso de cupos de envíos (por país / período / canal)")
+    tiene_cupos = False
+    for r in resultados_canales:
+        max_env = r["cupo_envios_periodo"]
+        if max_env is None:
+            continue
+        tiene_cupos = True
+        envios = r["envios"]
+        canal = r["canal"]
+        if envios > max_env:
+            st.warning(
+                f"{canal} – planeas {envios:,} envíos y el máximo {r['periodo_cupo'].lower()} "
+                f"para {segmento} en {pais} es {max_env:,}. Estás excediendo el cupo."
+            )
+        else:
+            uso_pct = r["uso_cupo_%"] or 0
+            st.info(
+                f"{canal} – usarías {envios:,} de {max_env:,} envíos {r['periodo_cupo'].lower()} "
+                f"({uso_pct:.1f}% del cupo) para {segmento} en {pais}."
+            )
+
+    if not tiene_cupos:
+        st.caption("No hay tabla de cupos cargada para este país/segmento/canal (o el canal no tiene cupo definido).")
+
+    # ------------------ RESUMEN DE COSTOS ------------------ #
+    if moneda_trabajo == "COP":
+        costo_total_fmt = f"{costo_total_calc:,.0f}"
+    else:
+        costo_total_fmt = f"{costo_total_calc:,.2f}"
+
+    st.markdown("#### Resumen de costos")
+    st.write(
+        f"- Costo total estimado (calculado): **{costo_total_fmt} {moneda_trabajo}** "
+        f"(~{total_costo_cop:,.0f} COP)"
+    )
+    if cps_budget is not None:
+        if moneda_trabajo == "COP":
+            cps_budget_fmt = f"{cps_budget:,.0f}"
+        else:
+            cps_budget_fmt = f"{cps_budget:.2f}"
+        st.write(
+            f"- Costo por SQL según budget ({budget_input:.2f} {moneda_trabajo}): "
+            f"**{cps_budget_fmt} {moneda_trabajo}**"
+        )
+
+    # ------------------ OUTPUT FORMATO TEXTO ------------------ #
+    # Budget que mostramos en el texto: si el usuario ingresó uno, ese; si no, el calculado
+    if budget_input and budget_input > 0:
+        budget_out = budget_input
+    else:
+        budget_out = costo_total_calc
+
+    if moneda_trabajo == "COP":
+        budget_str = f"{budget_out:,.0f}"
+        costo_total_calc_str = f"{costo_total_calc:,.0f}"
+        cps_calc_str = f"{cps_calc:,.0f}"
+        cps_budget_str = f"{cps_budget:,.0f}" if cps_budget is not None else None
+    else:
+        budget_str = f"{budget_out:.2f}"
+        costo_total_calc_str = f"{costo_total_calc:.2f}"
+        cps_calc_str = f"{cps_calc:.2f}"
+        cps_budget_str = f"{cps_budget:.2f}" if cps_budget is not None else None
+
+    canales_nombres = ", ".join(sorted({r["canal"] for r in resultados_canales}))
+
+    lines = []
+    lines.append(f"País: {pais}")
+    lines.append(f"Periodo de referencia: {periodo_cupo}")
+    lines.append(f"Base: {
